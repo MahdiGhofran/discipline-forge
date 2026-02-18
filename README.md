@@ -141,17 +141,6 @@ Your app will be live at `https://your-app-name.streamlit.app`
 
 ---
 
-## Default Access Codes
-
-| User | Access Code |
-|------|-------------|
-| Mahdi | `mahdi2026` |
-| Daniel | `daniel2026` |
-
-> To change access codes, update the `USERS` dictionary in `app.py` with new SHA-256 hashes.
-
----
-
 ## Project Structure
 
 ```
