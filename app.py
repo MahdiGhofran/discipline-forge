@@ -811,8 +811,8 @@ def render_overview_cards(data: dict):
     # Monthly penalty
     penalty_info = get_penalty_info(data)
 
-    # Instagram today
-    ig_today = data.get("instagram", {}).get(today, {}).get("minutes", 0)
+    ig_today_data = data.get("instagram", {}).get(today, {})
+    ig_today = ig_today_data.get("minutes", 0)
     ig_ok = ig_today <= 45
 
     c1, c2, c3, c4 = st.columns(4)
@@ -942,38 +942,41 @@ def render_tasks_section(data: dict, username: str):
     today_tasks = data.get("tasks", {}).get(today, {"items": []})
     items = today_tasks.get("items", [])
 
-    # Ensure exactly 3 task slots
     while len(items) < 3:
         items.append({"text": "", "done": False})
 
     col_input, col_progress = st.columns([2, 1])
 
     with col_input:
-        with st.form("tasks_form"):
-            st.markdown("**Define and track your 3 main tasks:**")
-            new_items = []
-            for i in range(3):
-                tc1, tc2 = st.columns([4, 1])
-                with tc1:
-                    text = st.text_input(
-                        f"Task {i+1}",
-                        value=items[i].get("text", ""),
-                        key=f"task_text_{i}",
-                        placeholder=f"Enter task {i+1}...",
-                    )
-                with tc2:
-                    done = st.checkbox(
-                        "Done",
-                        value=items[i].get("done", False),
-                        key=f"task_done_{i}",
-                    )
-                new_items.append({"text": text, "done": done})
+        st.markdown("**Define and track your 3 main tasks:**")
 
-            if st.form_submit_button("Save Tasks", use_container_width=True):
-                data.setdefault("tasks", {})[today] = {"items": new_items}
-                save_user_data(username, data)
-                st.success("Tasks saved!")
-                st.rerun()
+        task_labels = ["1️⃣  First Task", "2️⃣  Second Task", "3️⃣  Third Task"]
+        new_items = []
+
+        for i in range(3):
+            st.markdown(f"**{task_labels[i]}**")
+            tc1, tc2 = st.columns([4, 1])
+            with tc1:
+                text = st.text_input(
+                    "Description",
+                    value=items[i].get("text", ""),
+                    key=f"task_text_{i}",
+                    placeholder=f"What's your task?",
+                    label_visibility="collapsed",
+                )
+            with tc2:
+                done = st.checkbox(
+                    "Done ✓",
+                    value=items[i].get("done", False),
+                    key=f"task_done_{i}",
+                )
+            new_items.append({"text": text, "done": done})
+
+        if st.button("💾  Save Tasks", key="save_tasks_btn", use_container_width=True):
+            data.setdefault("tasks", {})[today] = {"items": new_items}
+            save_user_data(username, data)
+            st.success("Tasks saved successfully!")
+            st.rerun()
 
     with col_progress:
         tasks_done = sum(1 for t in items if t.get("done"))
@@ -981,7 +984,6 @@ def render_tasks_section(data: dict, username: str):
         fig = make_progress_ring(pct, "Today", "#00cec9" if pct >= 80 else ("#fdcb6e" if pct >= 50 else "#ff6b6b"))
         st.plotly_chart(fig, use_container_width=False, config={"displayModeBar": False})
 
-        # Weekly progress
         week_tasks_done = 0
         week_tasks_total = 0
         for i in range(7):
@@ -999,7 +1001,6 @@ def render_tasks_section(data: dict, username: str):
             unsafe_allow_html=True,
         )
 
-        # Monthly progress
         month_tasks_done = 0
         month_tasks_total = 0
         for key, val in data.get("tasks", {}).items():
@@ -1019,61 +1020,207 @@ def render_tasks_section(data: dict, username: str):
 
 def render_report_section(data: dict, username: str):
     st.markdown(
-        '<div class="section-header">📝 Daily Report</div>',
+        '<div class="section-header">📝 Daily Performance Assessment</div>',
         unsafe_allow_html=True,
     )
 
+    ASSESSMENT_QUESTIONS = [
+        {
+            "id": "focus",
+            "icon": "🎯",
+            "question": "Focus & Concentration Level",
+            "options": [
+                "Constantly distracted, couldn't focus at all",
+                "Focused sometimes, but lost track often",
+                "Mostly focused with minor distractions",
+                "Deep focus throughout the day — locked in",
+            ],
+        },
+        {
+            "id": "energy",
+            "icon": "⚡",
+            "question": "Energy & Physical State",
+            "options": [
+                "Exhausted, no energy all day",
+                "Low energy, pushed through with difficulty",
+                "Good energy for most of the day",
+                "High energy & fully charged all day",
+            ],
+        },
+        {
+            "id": "discipline",
+            "icon": "🛡️",
+            "question": "Self-Discipline & Willpower",
+            "options": [
+                "Gave in to distractions and temptations",
+                "Struggled but managed to resist sometimes",
+                "Stayed disciplined with minor slips",
+                "Iron discipline — followed the plan exactly",
+            ],
+        },
+        {
+            "id": "time_mgmt",
+            "icon": "⏱️",
+            "question": "Time Management",
+            "options": [
+                "Wasted most of the day, no structure",
+                "Some time wasted, partially productive",
+                "Managed time well, minor inefficiencies",
+                "Every hour was planned and well-spent",
+            ],
+        },
+        {
+            "id": "task_quality",
+            "icon": "✅",
+            "question": "Quality of Work Done",
+            "options": [
+                "Did not complete tasks / poor quality",
+                "Completed some tasks with mediocre quality",
+                "Good quality work on most tasks",
+                "Excellent quality — proud of every task",
+            ],
+        },
+        {
+            "id": "growth",
+            "icon": "📈",
+            "question": "Learning & Personal Growth",
+            "options": [
+                "Did not learn anything new today",
+                "Minor learning, nothing significant",
+                "Learned something useful and applied it",
+                "Major breakthrough / deep learning session",
+            ],
+        },
+    ]
+
     today = get_today()
     today_report = data.get("reports", {}).get(today, {})
+    saved_answers = today_report.get("answers", {})
 
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([2.5, 1])
 
     with col1:
-        with st.form("report_form"):
-            st.markdown("**End-of-day performance summary**")
-            summary = st.text_area(
-                "How was your day? What did you accomplish?",
-                value=today_report.get("summary", ""),
-                height=120,
-                placeholder="Write a brief summary of your performance today...",
-            )
-            rating = st.slider(
-                "Self-Rating (1–10)",
-                min_value=1,
-                max_value=10,
-                value=today_report.get("rating", 5),
-            )
+        with st.form("assessment_form"):
+            st.markdown("**Rate your performance across 6 key dimensions:**")
+            st.markdown("")
 
-            if st.form_submit_button("Submit Report", use_container_width=True):
+            answers = {}
+            for q in ASSESSMENT_QUESTIONS:
+                saved_idx = saved_answers.get(q["id"], 0)
+                options_display = [f"{i+1}. {opt}" for i, opt in enumerate(q["options"])]
+                selected = st.radio(
+                    f"{q['icon']}  {q['question']}",
+                    options=list(range(4)),
+                    format_func=lambda x, opts=options_display: opts[x],
+                    index=saved_idx,
+                    key=f"assess_{q['id']}",
+                    horizontal=False,
+                )
+                answers[q["id"]] = selected
+                st.markdown("---")
+
+            if st.form_submit_button("📊  Submit Assessment", use_container_width=True):
+                total_points = sum(answers.values())
+                max_points = len(ASSESSMENT_QUESTIONS) * 3
+                rating = round((total_points / max_points) * 10, 1)
+
                 data.setdefault("reports", {})[today] = {
-                    "summary": summary,
+                    "answers": answers,
                     "rating": rating,
+                    "total_points": total_points,
+                    "max_points": max_points,
                     "submitted_at": datetime.now().strftime("%H:%M"),
                 }
                 save_user_data(username, data)
-                st.success("Report submitted!")
+                st.success(f"Assessment submitted! Your score: {rating}/10")
                 st.rerun()
 
     with col2:
-        if today_report:
+        if today_report and today_report.get("rating"):
+            rating_val = today_report["rating"]
             st.markdown(
-                f"""<div class="badge badge-success">✓ Report submitted at {today_report.get('submitted_at', '')}</div>""",
+                f"""<div class="badge badge-success">✓ Submitted at {today_report.get('submitted_at', '')}</div>""",
                 unsafe_allow_html=True,
             )
-            st.markdown(f"**Rating:** {'⭐' * today_report.get('rating', 0)}")
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            if rating_val >= 8:
+                grade, grade_color = "A — Excellent", "#00cec9"
+            elif rating_val >= 6:
+                grade, grade_color = "B — Good", "#a29bfe"
+            elif rating_val >= 4:
+                grade, grade_color = "C — Average", "#fdcb6e"
+            else:
+                grade, grade_color = "D — Needs Work", "#ff6b6b"
+
+            st.markdown(
+                f"""
+            <div class="metric-card" style="text-align:center;">
+                <div style="font-size:48px; font-weight:900; color:{grade_color};">{rating_val}</div>
+                <div style="font-size:13px; color:var(--text-secondary); margin:4px 0;">out of 10</div>
+                <div style="font-size:14px; font-weight:700; color:{grade_color};">{grade}</div>
+            </div>
+            """,
+                unsafe_allow_html=True,
+            )
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            dimension_labels = [q["icon"] + " " + q["question"].split(" ")[0] for q in ASSESSMENT_QUESTIONS]
+            dimension_scores = [saved_answers.get(q["id"], 0) + 1 for q in ASSESSMENT_QUESTIONS]
+
+            fig = go.Figure()
+            fig.add_trace(go.Scatterpolar(
+                r=dimension_scores + [dimension_scores[0]],
+                theta=dimension_labels + [dimension_labels[0]],
+                fill="toself",
+                fillcolor="rgba(108,92,231,0.2)",
+                line=dict(color="#6c5ce7", width=2),
+                marker=dict(size=6, color="#a29bfe"),
+            ))
+            fig.update_layout(
+                polar=dict(
+                    bgcolor="rgba(0,0,0,0)",
+                    radialaxis=dict(
+                        visible=True, range=[0, 4],
+                        gridcolor="rgba(42,42,69,0.5)",
+                        tickfont=dict(color="#9898b0", size=10),
+                    ),
+                    angularaxis=dict(
+                        gridcolor="rgba(42,42,69,0.5)",
+                        tickfont=dict(color="#9898b0", size=10, family="Inter"),
+                    ),
+                ),
+                paper_bgcolor="rgba(0,0,0,0)",
+                margin=dict(t=20, b=20, l=40, r=40),
+                height=250,
+                showlegend=False,
+            )
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         else:
             st.markdown(
                 '<div class="badge badge-warning">⏳ Not submitted yet</div>',
                 unsafe_allow_html=True,
             )
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown(
+                """
+            <div class="metric-card" style="text-align:center; padding:30px;">
+                <div style="font-size:36px; margin-bottom:8px;">📋</div>
+                <div style="font-size:14px; color:var(--text-secondary); line-height:1.6;">
+                    Answer the 6 assessment<br>questions to get your<br>daily performance score.
+                </div>
+            </div>
+            """,
+                unsafe_allow_html=True,
+            )
 
-    # Rating chart over time
     reports = data.get("reports", {})
     if len(reports) > 1:
         sorted_dates = sorted(reports.keys())[-30:]
         dates_list = sorted_dates
         ratings = [reports[d].get("rating", 0) for d in sorted_dates]
-        fig = make_line_chart(dates_list, ratings, "Self-Rating Over Time", "#a29bfe", "Rating")
+        fig = make_line_chart(dates_list, ratings, "Performance Score Over Time", "#a29bfe", "Score")
         fig.update_yaxes(range=[0, 10.5])
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
@@ -1147,37 +1294,72 @@ def render_instagram_section(data: dict, username: str):
         unsafe_allow_html=True,
     )
 
+    IG_OPTIONS = {
+        "🚫  Did not use Instagram today (0 min)": 0,
+        "✅  Under 15 minutes": 10,
+        "✅  15 – 30 minutes": 25,
+        "✅  30 – 45 minutes (at the limit)": 45,
+        "⚠️  45 – 60 minutes (over limit!)": 55,
+        "🔴  60 – 90 minutes (way over!)": 75,
+        "🔴  90 – 120 minutes (critical!)": 105,
+        "💀  Over 2 hours (out of control)": 150,
+    }
+
     today = get_today()
     today_ig = data.get("instagram", {}).get(today, {})
+
+    saved_option_key = today_ig.get("option", None)
+    saved_idx = 0
+    if saved_option_key and saved_option_key in list(IG_OPTIONS.keys()):
+        saved_idx = list(IG_OPTIONS.keys()).index(saved_option_key)
 
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        with st.form("ig_form"):
-            st.markdown("**Log your Instagram usage (limit: 45 minutes)**")
-            minutes = st.number_input(
-                "Minutes used today",
-                min_value=0,
-                max_value=600,
-                value=today_ig.get("minutes", 0),
-                step=5,
+        st.markdown("**How much Instagram did you use today?**")
+        st.markdown(f"<span style='color:var(--text-secondary); font-size:13px;'>Daily limit: <b style=\"color:#fdcb6e;\">45 minutes</b> — Anything over = penalty</span>", unsafe_allow_html=True)
+        st.markdown("")
+
+        selected_option = st.radio(
+            "Select your usage range:",
+            options=list(IG_OPTIONS.keys()),
+            index=saved_idx,
+            key="ig_usage_radio",
+        )
+
+        minutes = IG_OPTIONS[selected_option]
+        is_violation = minutes > 45
+
+        if is_violation:
+            st.markdown(
+                f"""<div class="badge badge-danger" style="margin-top:8px;">⚠️ OVER LIMIT — This will add a penalty!</div>""",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f"""<div class="badge badge-success" style="margin-top:8px;">✓ Within the 45-minute limit</div>""",
+                unsafe_allow_html=True,
             )
 
-            if st.form_submit_button("Log Usage", use_container_width=True):
-                was_violation = today_ig.get("violation", False)
-                is_violation = minutes > 45
-                data.setdefault("instagram", {})[today] = {
-                    "minutes": minutes,
-                    "violation": is_violation,
-                }
+        st.markdown("")
+        if st.button("📱  Log Instagram Usage", key="ig_submit_btn", use_container_width=True):
+            was_violation = today_ig.get("violation", False)
+            data.setdefault("instagram", {})[today] = {
+                "minutes": minutes,
+                "option": selected_option,
+                "violation": is_violation,
+            }
 
-                if is_violation and not was_violation:
-                    data = add_penalty(data)
-                    st.warning(f"⚠️ You exceeded the 45-minute limit! Penalty added.")
+            if is_violation and not was_violation:
+                data = add_penalty(data)
+                st.error(f"🔴 You exceeded the 45-minute limit! Penalty added to your account.")
+            elif is_violation and was_violation:
+                st.warning("⚠️ Usage updated (penalty was already applied for today).")
+            else:
+                st.success(f"Instagram usage logged: {selected_option}")
 
-                save_user_data(username, data)
-                st.success(f"Instagram usage logged: {minutes} minutes")
-                st.rerun()
+            save_user_data(username, data)
+            st.rerun()
 
     with col2:
         minutes_val = today_ig.get("minutes", 0)
@@ -1186,17 +1368,40 @@ def render_instagram_section(data: dict, username: str):
         fig = make_progress_ring(usage_pct, "of limit", color)
         st.plotly_chart(fig, use_container_width=False, config={"displayModeBar": False})
 
-    # Weekly chart
+        if today_ig.get("option"):
+            st.markdown(
+                f"""<div class="badge {'badge-success' if not today_ig.get('violation') else 'badge-danger'}" style="margin-top:8px;">
+                    {'✓ Logged' if not today_ig.get('violation') else '✗ Violation'} — {today_ig.get('minutes', 0)} min
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
     week_dates = []
     week_minutes = []
+    week_colors = []
     for i in range(6, -1, -1):
         d = (date.today() - timedelta(days=i)).isoformat()
         day_label = (date.today() - timedelta(days=i)).strftime("%a")
         week_dates.append(day_label)
-        week_minutes.append(data.get("instagram", {}).get(d, {}).get("minutes", 0))
+        m = data.get("instagram", {}).get(d, {}).get("minutes", 0)
+        week_minutes.append(m)
+        week_colors.append("#ff6b6b" if m > 45 else "#a29bfe")
 
-    fig = make_bar_chart(week_dates, week_minutes, "Weekly Instagram Usage (minutes)", "#a29bfe")
-    fig.add_hline(y=45, line_dash="dash", line_color="#ff6b6b", annotation_text="45 min limit")
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=week_dates, y=week_minutes,
+        marker=dict(color=week_colors, cornerradius=6),
+    ))
+    fig.add_hline(y=45, line_dash="dash", line_color="#ff6b6b",
+                  annotation_text="45 min limit",
+                  annotation_font=dict(color="#ff6b6b", size=12))
+    fig.update_layout(
+        title=dict(text="Weekly Instagram Usage", font=dict(size=16, color="#e8e8f0", family="Inter")),
+        xaxis=dict(gridcolor="rgba(42,42,69,0.5)", color="#9898b0", tickfont=dict(family="Inter")),
+        yaxis=dict(title="Minutes", gridcolor="rgba(42,42,69,0.5)", color="#9898b0", tickfont=dict(family="Inter")),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        height=300, margin=dict(t=50, b=40, l=50, r=20),
+    )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
